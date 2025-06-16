@@ -1,103 +1,182 @@
-import Image from "next/image";
+'use client';
+
+import Image from 'next/image';
+import { useRef, useState, useEffect } from 'react';
+import { auth, db } from '@/lib/firebase';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+
+const TOTAL_TIME = 15 * 60;
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
+  useEffect(() => {
+    signInAnonymously(auth).catch(console.error);
+    onAuthStateChanged(auth, (user) => {
+      if (user) setUserId(user.uid);
+    });
+  }, []);
+
+  const logSessionCompleted = async (uid: string | null) => {
+    if (!uid) return;
+    await addDoc(collection(db, 'sessions'), {
+      userId: uid,
+      endedAt: serverTimestamp(),
+      status: 'completed',
+      duration: elapsed,
+    });
+  };
+
+  useEffect(() => {
+    if (isPlaying) {
+      timerRef.current = setInterval(() => {
+        setElapsed((prev) => {
+          if (prev >= TOTAL_TIME) {
+            clearInterval(timerRef.current!);
+            audioRef.current?.pause();
+            logSessionCompleted(userId);
+            return TOTAL_TIME;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isPlaying, userId]);
+
+  const playAudio = async () => {
+    if (audioRef.current) {
+      if (elapsed === TOTAL_TIME || elapsed === 0) {
+        audioRef.current.currentTime = 0;
+        setElapsed(0);
+      }
+      audioRef.current.play();
+      setIsPlaying(true);
+
+      if (userId) {
+        await addDoc(collection(db, 'sessions'), {
+          userId,
+          startedAt: serverTimestamp(),
+          status: 'started',
+        });
+      }
+    }
+  };
+
+  const pauseAudio = () => {
+    audioRef.current?.pause();
+    setIsPlaying(false);
+  };
+
+  const progress = 314 - (314 * elapsed) / TOTAL_TIME;
+
+  return (
+    <main
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f9f9f9',
+        padding: '2rem 1rem',
+        fontFamily: 'Poppins, sans-serif',
+      }}
+    >
+      <Image src="/logo.svg" alt="CalmPulse Logo" width={80} height={80} />
+      <h1 style={{ marginTop: '0.5rem', fontSize: '2.2rem' }}>CalmPulse</h1>
+      <p style={{ marginBottom: '2rem', fontSize: '1.1rem', textAlign: 'center' }}>
+        Breathe. Relax. Focus. Take 15 minutes just for yourself.
+      </p>
+
+      {/* RING */}
+      <div style={{ marginBottom: '2rem' }}>
+        <svg width="120" height="120">
+          <circle
+            r="50"
+            cx="60"
+            cy="60"
+            stroke="#eee"
+            strokeWidth="10"
+            fill="none"
+          />
+          <circle
+            r="50"
+            cx="60"
+            cy="60"
+            stroke="#FFD700"
+            strokeWidth="10"
+            fill="none"
+            strokeDasharray="314"
+            strokeDashoffset={progress}
+            transform="rotate(-90 60 60)" // this is the key
+            style={{ transition: 'stroke-dashoffset 1s linear' }}
+          />
+        </svg>
+      </div>
+
+      {/* BUTTONS */}
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '6rem' }}>
+        <button onClick={playAudio} disabled={isPlaying} style={buttonStyle(true)}>Start</button>
+        <button onClick={pauseAudio} disabled={!isPlaying} style={buttonStyle(false)}>Pause</button>
+      </div>
+
+      <audio ref={audioRef} src="/audio/Meditation_07_06.mp3" preload="auto" />
+
+      {/* BMC BUTTON */}
+      <div style={{ marginBottom: '0.5rem' }}>
         <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+          href="https://www.buymeacoffee.com/calmpulse"
           target="_blank"
           rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#FFDD00',
+            color: '#000',
+            fontWeight: 600,
+            padding: '0.5rem 1.25rem',
+            borderRadius: '15px',
+            textDecoration: 'none',
+            fontSize: '0.85rem',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            gap: '0.5rem',
+          }}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+          <img
+            src="https://cdn.buymeacoffee.com/buttons/bmc-new-btn-logo.svg"
+            alt="Buy me a coffee"
+            style={{ width: 18, height: 18 }}
           />
-          Learn
+          Buy me a coffee
         </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+      </div>
+
+      <footer style={{ fontSize: '0.9rem', color: '#666' }}>
+        CalmPulse © {new Date().getFullYear()}
       </footer>
-    </div>
+    </main>
   );
+}
+
+function buttonStyle(primary: boolean) {
+  return {
+    backgroundColor: primary ? '#000' : '#fff',
+    color: primary ? '#fff' : '#000',
+    border: '2px solid #000',
+    padding: '0.5rem 1.25rem',
+    borderRadius: '999px',
+    fontSize: '1rem',
+    fontWeight: 500,
+    cursor: 'pointer',
+  };
 }
