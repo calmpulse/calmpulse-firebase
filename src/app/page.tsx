@@ -6,7 +6,7 @@ import { auth, db } from '@/lib/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
-const TOTAL_TIME = 15 * 60;
+const TOTAL_TIME = 15 * 60; // 15 minutes in seconds
 
 export default function Home() {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -15,6 +15,7 @@ export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 🔐 Firebase anonymous auth
   useEffect(() => {
     signInAnonymously(auth).catch(console.error);
     onAuthStateChanged(auth, (user) => {
@@ -32,6 +33,7 @@ export default function Home() {
     });
   };
 
+  // 🕒 Timer management
   useEffect(() => {
     if (isPlaying) {
       timerRef.current = setInterval(() => {
@@ -53,21 +55,22 @@ export default function Home() {
   }, [isPlaying, userId]);
 
   const playAudio = async () => {
-    if (audioRef.current) {
-      if (elapsed === TOTAL_TIME || elapsed === 0) {
-        audioRef.current.currentTime = 0;
-        setElapsed(0);
-      }
-      audioRef.current.play();
-      setIsPlaying(true);
+    if (!audioRef.current) return;
 
-      if (userId) {
-        await addDoc(collection(db, 'sessions'), {
-          userId,
-          startedAt: serverTimestamp(),
-          status: 'started',
-        });
-      }
+    if (elapsed === TOTAL_TIME || elapsed === 0) {
+      audioRef.current.currentTime = 0;
+      setElapsed(0);
+    }
+
+    await audioRef.current.play();
+    setIsPlaying(true);
+
+    if (userId) {
+      await addDoc(collection(db, 'sessions'), {
+        userId,
+        startedAt: serverTimestamp(),
+        status: 'started',
+      });
     }
   };
 
@@ -97,7 +100,7 @@ export default function Home() {
         Breathe. Relax. Focus. Take 15 minutes just for yourself.
       </p>
 
-      {/* RING */}
+      {/* 🟡 Breathing Ring */}
       <div style={{ marginBottom: '2rem' }}>
         <svg width="120" height="120">
           <circle
@@ -117,21 +120,26 @@ export default function Home() {
             fill="none"
             strokeDasharray="314"
             strokeDashoffset={progress}
-            transform="rotate(-90 60 60)" // this is the key
+            transform="rotate(-90 60 60)"
             style={{ transition: 'stroke-dashoffset 1s linear' }}
           />
         </svg>
       </div>
 
-      {/* BUTTONS */}
+      {/* 🎛️ Controls */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '6rem' }}>
-        <button onClick={playAudio} disabled={isPlaying} style={buttonStyle(true)}>Start</button>
-        <button onClick={pauseAudio} disabled={!isPlaying} style={buttonStyle(false)}>Pause</button>
+        <button onClick={playAudio} disabled={isPlaying} style={buttonStyle(true)}>
+          Start
+        </button>
+        <button onClick={pauseAudio} disabled={!isPlaying} style={buttonStyle(false)}>
+          Pause
+        </button>
       </div>
 
+      {/* 🔊 Audio */}
       <audio ref={audioRef} src="/audio/Meditation_07_06.mp3" preload="auto" />
 
-      {/* BMC BUTTON */}
+      {/* ☕ Buy Me a Coffee */}
       <div style={{ marginBottom: '0.5rem' }}>
         <a
           href="https://www.buymeacoffee.com/calmpulse"
@@ -161,6 +169,7 @@ export default function Home() {
         </a>
       </div>
 
+      {/* 📅 Footer */}
       <footer style={{ fontSize: '0.9rem', color: '#666' }}>
         CalmPulse © {new Date().getFullYear()}
       </footer>
@@ -180,3 +189,4 @@ function buttonStyle(primary: boolean) {
     cursor: 'pointer',
   };
 }
+
