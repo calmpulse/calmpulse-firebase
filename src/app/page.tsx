@@ -52,7 +52,7 @@ export default function Home() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPlaying, userId]);
+  }, [isPlaying, userId, logSessionCompleted]);
 
   const playAudio = async () => {
     if (!audioRef.current) return;
@@ -160,10 +160,11 @@ export default function Home() {
             gap: '0.5rem',
           }}
         >
-          <img
+          <Image
             src="https://cdn.buymeacoffee.com/buttons/bmc-new-btn-logo.svg"
             alt="Buy me a coffee"
-            style={{ width: 18, height: 18 }}
+            width={18}
+            height={18}
           />
           Buy me a coffee
         </a>
