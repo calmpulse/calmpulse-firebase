@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 
 export default function EntryModal({
   onClose,
@@ -8,10 +8,11 @@ export default function EntryModal({
 }) {
   const modalRef = useRef<HTMLDivElement>(null);
 
-  const handleJustPlay = () => {
+  const handleJustPlay = useCallback(() => {
     localStorage.setItem('cp_seen', 'yes');
     onClose();
-  };
+  }, [onClose]);
+
 
   useEffect(() => {
     // Focus management
