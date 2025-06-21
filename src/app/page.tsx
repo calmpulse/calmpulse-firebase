@@ -1,12 +1,12 @@
 'use client';
 
 import Image from 'next/image';
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
-const TOTAL_TIME = 15 * 60; // 15 minutes in seconds
+const TOTAL_TIME = 15 * 60;
 
 export default function Home() {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -23,7 +23,8 @@ export default function Home() {
     });
   }, []);
 
-  const logSessionCompleted = async (uid: string | null) => {
+  // ✅ FIXED: useCallback for useEffect dependency
+  const logSessionCompleted = useCallback(async (uid: string | null) => {
     if (!uid) return;
     await addDoc(collection(db, 'sessions'), {
       userId: uid,
@@ -31,7 +32,7 @@ export default function Home() {
       status: 'completed',
       duration: elapsed,
     });
-  };
+  }, [elapsed]);
 
   // 🕒 Timer management
   useEffect(() => {
@@ -100,7 +101,7 @@ export default function Home() {
         Breathe. Relax. Focus. Take 15 minutes just for yourself.
       </p>
 
-      {/* 🟡 Breathing Ring */}
+      {/* RING */}
       <div style={{ marginBottom: '2rem' }}>
         <svg width="120" height="120">
           <circle
@@ -126,7 +127,7 @@ export default function Home() {
         </svg>
       </div>
 
-      {/* 🎛️ Controls */}
+      {/* BUTTONS */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '6rem' }}>
         <button onClick={playAudio} disabled={isPlaying} style={buttonStyle(true)}>
           Start
@@ -136,10 +137,9 @@ export default function Home() {
         </button>
       </div>
 
-      {/* 🔊 Audio */}
       <audio ref={audioRef} src="/audio/Meditation_07_06.mp3" preload="auto" />
 
-      {/* ☕ Buy Me a Coffee */}
+      {/* Buy Me a Coffee */}
       <div style={{ marginBottom: '0.5rem' }}>
         <a
           href="https://www.buymeacoffee.com/calmpulse"
@@ -170,7 +170,6 @@ export default function Home() {
         </a>
       </div>
 
-      {/* 📅 Footer */}
       <footer style={{ fontSize: '0.9rem', color: '#666' }}>
         CalmPulse © {new Date().getFullYear()}
       </footer>
@@ -190,4 +189,3 @@ function buttonStyle(primary: boolean) {
     cursor: 'pointer',
   };
 }
-

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 
 export default function EntryModal({
   onClose,
@@ -7,6 +7,11 @@ export default function EntryModal({
   onClose: () => void;
 }) {
   const modalRef = useRef<HTMLDivElement>(null);
+
+  const handleJustPlay = useCallback(() => {
+    localStorage.setItem('cp_seen', 'yes');
+    onClose();
+  }, [onClose]);
 
   useEffect(() => {
     // Focus management
@@ -21,12 +26,7 @@ export default function EntryModal({
     };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, []);
-
-  const handleJustPlay = () => {
-    localStorage.setItem('cp_seen', 'yes');
-    onClose();
-  };
+  }, [handleJustPlay]);
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -56,7 +56,7 @@ export default function EntryModal({
         </h2>
         
         <p className="text-center text-gray-600 mb-8 text-lg">
-          Track your meditation journey<br />or start today's session.
+          Track your meditation journey<br />or start today&apos;s session.
         </p>
 
         <div className="space-y-3">
