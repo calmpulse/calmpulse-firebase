@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 
 export default function EntryModal({
   onClose,
@@ -8,10 +8,10 @@ export default function EntryModal({
 }) {
   const modalRef = useRef<HTMLDivElement>(null);
 
-  const handleJustPlay = useCallback(() => {
+  const handleJustPlay = () => {
     localStorage.setItem('cp_seen', 'yes');
     onClose();
-  }, [onClose]);
+  };
 
   useEffect(() => {
     // Focus management
@@ -26,7 +26,7 @@ export default function EntryModal({
     };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [handleJustPlay]);
+  }, [handleJustPlay]); // ✅ Include dependency here
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -85,3 +85,4 @@ export default function EntryModal({
     </div>
   );
 }
+

@@ -6,7 +6,7 @@ import { auth, db } from '@/lib/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
-const TOTAL_TIME = 15 * 60;
+const TOTAL_TIME = 15 * 60; // 15 minutes in seconds
 
 export default function Home() {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -15,15 +15,7 @@ export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 🔐 Firebase anonymous auth
-  useEffect(() => {
-    signInAnonymously(auth).catch(console.error);
-    onAuthStateChanged(auth, (user) => {
-      if (user) setUserId(user.uid);
-    });
-  }, []);
-
-  // ✅ FIXED: useCallback for useEffect dependency
+  // ✅ Define before useEffect to avoid ESLint warning
   const logSessionCompleted = useCallback(async (uid: string | null) => {
     if (!uid) return;
     await addDoc(collection(db, 'sessions'), {
@@ -33,6 +25,14 @@ export default function Home() {
       duration: elapsed,
     });
   }, [elapsed]);
+
+  // 🔐 Firebase anonymous auth
+  useEffect(() => {
+    signInAnonymously(auth).catch(console.error);
+    onAuthStateChanged(auth, (user) => {
+      if (user) setUserId(user.uid);
+    });
+  }, []);
 
   // 🕒 Timer management
   useEffect(() => {
@@ -101,7 +101,7 @@ export default function Home() {
         Breathe. Relax. Focus. Take 15 minutes just for yourself.
       </p>
 
-      {/* RING */}
+      {/* 🟡 Breathing Ring */}
       <div style={{ marginBottom: '2rem' }}>
         <svg width="120" height="120">
           <circle
@@ -127,7 +127,7 @@ export default function Home() {
         </svg>
       </div>
 
-      {/* BUTTONS */}
+      {/* 🎛️ Controls */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '6rem' }}>
         <button onClick={playAudio} disabled={isPlaying} style={buttonStyle(true)}>
           Start
@@ -137,9 +137,10 @@ export default function Home() {
         </button>
       </div>
 
+      {/* 🔊 Audio */}
       <audio ref={audioRef} src="/audio/Meditation_07_06.mp3" preload="auto" />
 
-      {/* Buy Me a Coffee */}
+      {/* ☕ Buy Me a Coffee */}
       <div style={{ marginBottom: '0.5rem' }}>
         <a
           href="https://www.buymeacoffee.com/calmpulse"
@@ -170,6 +171,7 @@ export default function Home() {
         </a>
       </div>
 
+      {/* 📅 Footer */}
       <footer style={{ fontSize: '0.9rem', color: '#666' }}>
         CalmPulse © {new Date().getFullYear()}
       </footer>
