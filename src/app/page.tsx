@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import Head from 'next/head';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -8,31 +9,32 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import AuthHeader from '@/components/AuthHeader';
 import EntryModal from '@/components/EntryModal';
 
-const TOTAL_TIME = 15 * 60; // 15 minutes
+export const dynamic = 'force-static'; // rendu statique
+
+const TOTAL_TIME = 15 * 60; // 15 min
 
 export default function Home() {
-  const audioRef = useRef<HTMLAudioElement>(null);
+  /* ---------- state ---------- */
+  const audioRef   = useRef<HTMLAudioElement>(null);
+  const timerRef   = useRef<NodeJS.Timeout | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [userId, setUserId] = useState<string | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [elapsed,   setElapsed]   = useState(0);
+  const [userId,    setUserId]    = useState<string | null>(null);
 
-  // Pour la modale
+  /* ---------- modal ---------- */
   const [showEntryModal, setShowEntryModal] = useState(false);
-  const [modalMode, setModalMode] = useState<'signup' | 'login'>('signup');
-  const [isClient, setIsClient] = useState(false);
+  const [modalMode,      setModalMode]      = useState<'signup' | 'login'>('signup');
+  const [isClient,       setIsClient]       = useState(false);
+  useEffect(() => setIsClient(true), []);
 
-  useEffect(() => { setIsClient(true); }, []);
-
+  /* ---------- auth listener ---------- */
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) setUserId(user.uid);
-      else setUserId(null);
-    });
-    return () => unsubscribe();
+    const unsub = onAuthStateChanged(auth, u => setUserId(u ? u.uid : null));
+    return unsub;
   }, []);
 
-  const logSessionCompleted = useCallback(async (uid: string | null) => {
+  /* ---------- log completed ---------- */
+  const logCompleted = useCallback(async (uid: string | null) => {
     if (!uid) return;
     await addDoc(collection(db, 'sessions'), {
       userId: uid,
@@ -42,25 +44,24 @@ export default function Home() {
     });
   }, [elapsed]);
 
+  /* ---------- timer ---------- */
   useEffect(() => {
-    if (isPlaying) {
-      timerRef.current = setInterval(() => {
-        setElapsed((prev) => {
-          if (prev >= TOTAL_TIME) {
-            clearInterval(timerRef.current!);
-            audioRef.current?.pause();
-            logSessionCompleted(userId);
-            return TOTAL_TIME;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isPlaying, userId, logSessionCompleted]);
+    if (!isPlaying) return;
+    timerRef.current = setInterval(() => {
+      setElapsed(prev => {
+        if (prev >= TOTAL_TIME) {
+          clearInterval(timerRef.current!);
+          audioRef.current?.pause();
+          logCompleted(userId);
+          return TOTAL_TIME;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+    return () => timerRef.current && clearInterval(timerRef.current);
+  }, [isPlaying, userId, logCompleted]);
 
+  /* ---------- controls ---------- */
   const playAudio = async () => {
     if (!audioRef.current) return;
     if (elapsed === TOTAL_TIME || elapsed === 0) {
@@ -77,7 +78,6 @@ export default function Home() {
       });
     }
   };
-
   const pauseAudio = () => {
     audioRef.current?.pause();
     setIsPlaying(false);
@@ -85,20 +85,17 @@ export default function Home() {
 
   const progress = 314 - (314 * elapsed) / TOTAL_TIME;
 
+  /* ---------- JSX ---------- */
   return (
     <>
-      {/* Header minimal en haut à droite */}
-      <AuthHeader onShowModal={(mode) => {
-        setModalMode(mode);
-        setShowEntryModal(true);
-      }} />
+      <Head>
+        <link rel="canonical" href="https://www.calmpulsedaily.com/" />
+      </Head>
 
-      {/* Modale authentification */}
+      <AuthHeader onShowModal={m => { setModalMode(m); setShowEntryModal(true); }} />
+
       {isClient && showEntryModal && (
-        <EntryModal
-          mode={modalMode}
-          onClose={() => setShowEntryModal(false)}
-        />
+        <EntryModal mode={modalMode} onClose={() => setShowEntryModal(false)} />
       )}
 
       <main
@@ -115,11 +112,13 @@ export default function Home() {
       >
         <Image src="/logo.svg" alt="CalmPulse Logo" width={80} height={80} />
         <h1 style={{ marginTop: '0.5rem', fontSize: '2.2rem' }}>CalmPulse</h1>
+
+        {/* tagline courte */}
         <p style={{ marginBottom: '2rem', fontSize: '1.1rem', textAlign: 'center' }}>
           Breathe. Relax. Focus. Take 15 minutes just for yourself.
         </p>
 
-        {/* 🟡 Breathing Ring */}
+        {/* breathing ring */}
         <div style={{ marginBottom: '2rem' }}>
           <svg width="120" height="120">
             <circle r="50" cx="60" cy="60" stroke="#eee" strokeWidth="10" fill="none" />
@@ -137,15 +136,26 @@ export default function Home() {
             />
           </svg>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '6rem' }}>
-          <button onClick={playAudio} disabled={isPlaying} style={buttonStyle(true)}>
-            Start
-          </button>
-          <button onClick={pauseAudio} disabled={!isPlaying} style={buttonStyle(false)}>
-            Pause
-          </button>
+
+        {/* controls */}
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '3rem' }}>
+          <button onClick={playAudio}  disabled={isPlaying} style={buttonStyle(true)}>Start</button>
+          <button onClick={pauseAudio} disabled={!isPlaying} style={buttonStyle(false)}>Pause</button>
         </div>
+
+        {/* paragraphe SEO déplacé en bas */}
+        <section style={{ maxWidth: 640, textAlign: 'center', margin: '0 0 2.2rem' }}>
+          <p style={{ fontSize: '1rem', lineHeight: 1.55 }}>
+            CalmPulse propose une séance audio guidée de pleine conscience de 15&nbsp;minutes
+            que vous pouvez lancer d’un simple clic. Respirez, relâchez la tension et
+            recentrez-vous&nbsp;: au bureau, à la maison ou avant de dormir.
+            Créez un compte gratuit pour suivre vos séries et progresser dans la durée.
+          </p>
+        </section>
+
         <audio ref={audioRef} src="/audio/Meditation_07_06.mp3" preload="auto" />
+
+        {/* buy me a coffee */}
         <div style={{ marginBottom: '0.5rem' }}>
           <a
             href="https://www.buymeacoffee.com/calmpulse"
@@ -175,6 +185,7 @@ export default function Home() {
             Buy me a coffee
           </a>
         </div>
+
         <footer style={{ fontSize: '0.9rem', color: '#666' }}>
           CalmPulse © {new Date().getFullYear()}
         </footer>
@@ -183,7 +194,7 @@ export default function Home() {
   );
 }
 
-function buttonStyle(primary: boolean) {
+function buttonStyle(primary: boolean): React.CSSProperties {
   return {
     backgroundColor: primary ? '#000' : '#fff',
     color: primary ? '#fff' : '#000',
