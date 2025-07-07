@@ -1,37 +1,51 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
 
-export default function AuthHeader({ onShowModal }: { onShowModal: (mode: 'signup' | 'login') => void }) {
-  const [user, setUser] = useState<any>(null);
-  const [lastName, setLastName] = useState<string | null>(null);
+export default function AuthHeader({
+  onShowModal,
+}: {
+  onShowModal: (mode: 'signup' | 'login') => void;
+}) {
+  const [user, setUser] = useState<User | null>(null);
+  const [initial, setInitial] = useState<string | null>(null);
 
+  /* ───────── listen for auth state ───────── */
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async user => {
-      setUser(user);
-      if (user) {
-        // Fetch lastName from Firestore if logged in
-        const docRef = doc(db, 'users', user.uid);
-        const snap = await getDoc(docRef);
-        if (snap.exists()) setLastName(snap.data().lastName || null);
-        else setLastName(null);
-      } else {
-        setLastName(null); // Reset lastName when logged out!
+    return onAuthStateChanged(auth, async currentUser => {
+      setUser(currentUser);
+
+      if (!currentUser) {
+        setInitial(null);
+        return;
+      }
+
+      /* 1️⃣  show instant initial (displayName → last name → email) */
+      const instantLetter =
+        currentUser.displayName?.split(' ').pop()?.[0] ??
+        currentUser.email?.[0] ??
+        '';
+      setInitial(instantLetter.toUpperCase());
+
+      /* 2️⃣  fetch Firestore profile in the background */
+      try {
+        const snap = await getDoc(doc(db, 'users', currentUser.uid));
+        const ln = (snap.data()?.lastName as string | undefined)?.[0];
+        if (ln) setInitial(ln.toUpperCase());
+      } catch {
+        /* network issues are ignored – we already have an initial */
       }
     });
-    return () => unsub();
   }, []);
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    // Optionally clear any state if needed, but useEffect will handle it
+  /* ───────── logout ───────── */
+  const handleLogout = () => {
+    void signOut(auth);
   };
 
-  // Only show avatar if logged in and lastName exists
-  const initial = lastName ? lastName[0].toUpperCase() : '';
-
+  /* ───────── UI ───────── */
   return (
     <div
       style={{
@@ -45,43 +59,19 @@ export default function AuthHeader({ onShowModal }: { onShowModal: (mode: 'signu
         zIndex: 200,
       }}
     >
-      {(!user || !lastName) ? (
+      {!user ? (
         <>
-          <button
-            onClick={() => onShowModal('signup')}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#111',
-              fontSize: '1.02rem',
-              fontWeight: 500,
-              cursor: 'pointer',
-              padding: 0,
-              letterSpacing: 0.1,
-            }}
-          >
+          <button onClick={() => onShowModal('signup')} style={linkStyle}>
             Subscribe
           </button>
-          <button
-            onClick={() => onShowModal('login')}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#111',
-              fontSize: '1.02rem',
-              fontWeight: 500,
-              cursor: 'pointer',
-              padding: 0,
-              letterSpacing: 0.1,
-            }}
-          >
+          <button onClick={() => onShowModal('login')} style={{ ...linkStyle, marginLeft: 18 }}>
             Login
           </button>
         </>
       ) : (
         <>
           <div
-            title={lastName || ''}
+            title={initial ?? ''}
             style={{
               width: 32,
               height: 32,
@@ -98,20 +88,7 @@ export default function AuthHeader({ onShowModal }: { onShowModal: (mode: 'signu
           >
             {initial}
           </div>
-          <button
-            onClick={handleLogout}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#111',
-              fontSize: '1.02rem',
-              fontWeight: 500,
-              cursor: 'pointer',
-              padding: 0,
-              letterSpacing: 0.1,
-              marginLeft: 2,
-            }}
-          >
+          <button onClick={handleLogout} style={{ ...linkStyle, marginLeft: 2 }}>
             Logout
           </button>
         </>
@@ -119,3 +96,15 @@ export default function AuthHeader({ onShowModal }: { onShowModal: (mode: 'signu
     </div>
   );
 }
+
+/* shared button style */
+const linkStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  color: '#111',
+  fontSize: '1.02rem',
+  fontWeight: 500,
+  cursor: 'pointer',
+  padding: 0,
+  letterSpacing: 0.1,
+};
