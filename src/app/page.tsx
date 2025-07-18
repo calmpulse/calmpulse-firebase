@@ -1,40 +1,33 @@
 'use client';
 
 import Image from 'next/image';
-import Head from 'next/head';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import AuthHeader from '@/components/AuthHeader';
 import EntryModal from '@/components/EntryModal';
+import { Hourglass, Database, Flame, ShieldCheck, TimerReset } from 'lucide-react';
 
-export const dynamic = 'force-static'; // rendu statique
-
-const TOTAL_TIME = 15 * 60; // 15 min
+const TOTAL_TIME = 15 * 60; // 15‑minute session
 
 export default function Home() {
-  /* ---------- state ---------- */
-  const audioRef   = useRef<HTMLAudioElement>(null);
-  const timerRef   = useRef<NodeJS.Timeout | null>(null);
+  /* ---------- state & refs ---------- */
+  const audioRef = useRef(null);
+  const timerRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [elapsed,   setElapsed]   = useState(0);
-  const [userId,    setUserId]    = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
-  /* ---------- modal ---------- */
-  const [showEntryModal, setShowEntryModal] = useState(false);
-  const [modalMode,      setModalMode]      = useState<'signup' | 'login'>('signup');
-  const [isClient,       setIsClient]       = useState(false);
-  useEffect(() => setIsClient(true), []);
+  /* ---------- auth ---------- */
+  const [userId, setUserId] = useState(null);
+  useEffect(() => onAuthStateChanged(auth, u => setUserId(u?.uid ?? null)), []);
 
-  /* ---------- auth listener ---------- */
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, u => setUserId(u ? u.uid : null));
-    return unsub;
-  }, []);
+  /* ---------- entry modal ---------- */
+  const [showModal, setShowModal] = useState(false);
+  const [modalMode, setModalMode] = useState('signup');
 
-  /* ---------- log completed ---------- */
-  const logCompleted = useCallback(async (uid: string | null) => {
+  /* ---------- Firestore log ---------- */
+  const logDone = useCallback(async uid => {
     if (!uid) return;
     await addDoc(collection(db, 'sessions'), {
       userId: uid,
@@ -44,25 +37,25 @@ export default function Home() {
     });
   }, [elapsed]);
 
-  /* ---------- timer ---------- */
+  /* ---------- timer loop ---------- */
   useEffect(() => {
     if (!isPlaying) return;
     timerRef.current = setInterval(() => {
-      setElapsed(prev => {
-        if (prev >= TOTAL_TIME) {
-          clearInterval(timerRef.current!);
+      setElapsed(p => {
+        if (p >= TOTAL_TIME) {
+          clearInterval(timerRef.current);
           audioRef.current?.pause();
-          logCompleted(userId);
+          logDone(userId);
           return TOTAL_TIME;
         }
-        return prev + 1;
+        return p + 1;
       });
     }, 1000);
     return () => timerRef.current && clearInterval(timerRef.current);
-  }, [isPlaying, userId, logCompleted]);
+  }, [isPlaying, userId, logDone]);
 
   /* ---------- controls ---------- */
-  const playAudio = async () => {
+  const play = async () => {
     if (!audioRef.current) return;
     if (elapsed === TOTAL_TIME || elapsed === 0) {
       audioRef.current.currentTime = 0;
@@ -70,140 +63,109 @@ export default function Home() {
     }
     await audioRef.current.play();
     setIsPlaying(true);
-    if (userId) {
-      await addDoc(collection(db, 'sessions'), {
-        userId,
-        startedAt: serverTimestamp(),
-        status: 'started',
-      });
-    }
+    userId && addDoc(collection(db, 'sessions'), {
+      userId, startedAt: serverTimestamp(), status: 'started',
+    });
   };
-  const pauseAudio = () => {
-    audioRef.current?.pause();
-    setIsPlaying(false);
-  };
+  const pause = () => { audioRef.current?.pause(); setIsPlaying(false); };
 
-  const progress = 314 - (314 * elapsed) / TOTAL_TIME;
+  const dash = 314 - (314 * elapsed) / TOTAL_TIME; // circle progress
 
-  /* ---------- JSX ---------- */
+  /* ---------- feature cards ---------- */
+  const cards = [
+    [
+      '15 Minutes to Reset',
+      'Reconnect to the present — at work, at home, wherever you are. Just hit start, breathe, and feel the shift.',
+      <TimerReset size={48} stroke="#FB7185" fill="none"/>,
+    ],
+    [
+      'Clinically Proven Calm',
+      '8 weeks of meditation can reduce anxiety by 30 % and double your sleep quality. It’s not magic — it’s science.',
+      <Database size={48} stroke="#8B5CF6" fill="none" />,
+    ],
+    [
+      'Daily Streak',
+      'Meditate daily, grow your streak, and unlock surprise boosts along the way. Build consistency — and see what happens.',
+      <Flame size={48} stroke="#FB923C" fill="#FFECDD" style={{ marginTop: '0px' }} />,
+    ],
+    [
+      'Powered by People',
+      'CalmPulse is free and independent. A small coffee keeps us going — and keeps the experience distraction‑free.',
+      <ShieldCheck size={48} stroke="#2E7D32" fill="#C8E6C9" />,
+    ],
+  ];
+
   return (
     <>
-      <Head>
-        <link rel="canonical" href="https://www.calmpulsedaily.com/" />
-      </Head>
+      <AuthHeader onShowModal={m => { setModalMode(m); setShowModal(true); }} />
+      {showModal && <EntryModal mode={modalMode} onClose={() => setShowModal(false)} />}
 
-      <AuthHeader onShowModal={m => { setModalMode(m); setShowEntryModal(true); }} />
+      {/* ---------- HERO ---------- */}
+      <section className="hero">
+        <Image src="/logo.svg" alt="CalmPulse logo" width={80} height={80} priority />
+        <h1>CalmPulse</h1>
+        <p className="tagline">Breathe. Relax. Focus. Take 15 minutes just for yourself.</p>
 
-      {isClient && showEntryModal && (
-        <EntryModal mode={modalMode} onClose={() => setShowEntryModal(false)} />
-      )}
-
-      <main
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#f9f9f9',
-          padding: '2rem 1rem',
-          fontFamily: 'Poppins, sans-serif',
-        }}
-      >
-        <Image src="/logo.svg" alt="CalmPulse Logo" width={80} height={80} />
-        <h1 style={{ marginTop: '0.5rem', fontSize: '2.2rem' }}>CalmPulse</h1>
-
-        {/* tagline courte */}
-        <p style={{ marginBottom: '2rem', fontSize: '1.1rem', textAlign: 'center' }}>
-          Breathe. Relax. Focus. Take 15 minutes just for yourself.
-        </p>
-
-        {/* breathing ring */}
-        <div style={{ marginBottom: '2rem' }}>
-          <svg width="120" height="120">
-            <circle r="50" cx="60" cy="60" stroke="#eee" strokeWidth="10" fill="none" />
-            <circle
-              r="50"
-              cx="60"
-              cy="60"
-              stroke="#FFD700"
-              strokeWidth="10"
-              fill="none"
-              strokeDasharray="314"
-              strokeDashoffset={progress}
-              transform="rotate(-90 60 60)"
-              style={{ transition: 'stroke-dashoffset 1s linear' }}
-            />
-          </svg>
+        <div className="ring">
+          <svg width="120" height="120"><circle r="50" cx="60" cy="60" stroke="#eee" strokeWidth="10" fill="none" /><circle r="50" cx="60" cy="60" stroke="#FFD700" strokeWidth="10" fill="none" strokeDasharray="314" strokeDashoffset={dash} transform="rotate(-90 60 60)" style={{ transition:'stroke-dashoffset 1s linear' }} /></svg>
         </div>
 
-        {/* controls */}
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '3rem' }}>
-          <button onClick={playAudio}  disabled={isPlaying} style={buttonStyle(true)}>Start</button>
-          <button onClick={pauseAudio} disabled={!isPlaying} style={buttonStyle(false)}>Pause</button>
+        <div className="controls">
+          <button className="btn primary" onClick={play} disabled={isPlaying}>Start</button>
+          <button className="btn" onClick={pause} disabled={!isPlaying}>Pause</button>
         </div>
 
-        {/* paragraphe SEO déplacé en bas */}
-        <section style={{ maxWidth: 640, textAlign: 'center', margin: '0 0 2.2rem' }}>
-          <p style={{ fontSize: '1rem', lineHeight: 1.55 }}>
-            CalmPulse propose une séance audio guidée de pleine conscience de 15&nbsp;minutes
-            que vous pouvez lancer d’un simple clic. Respirez, relâchez la tension et
-            recentrez-vous&nbsp;: au bureau, à la maison ou avant de dormir.
-            Créez un compte gratuit pour suivre vos séries et progresser dans la durée.
-          </p>
-        </section>
+        <span className="arrow-bounce">↓</span>
+      </section>
 
-        <audio ref={audioRef} src="/audio/Meditation_07_06.mp3" preload="auto" />
-
-        {/* buy me a coffee */}
-        <div style={{ marginBottom: '0.5rem' }}>
-          <a
-            href="https://www.buymeacoffee.com/calmpulse"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: '#FFDD00',
-              color: '#000',
-              fontWeight: 600,
-              padding: '0.5rem 1.25rem',
-              borderRadius: '15px',
-              textDecoration: 'none',
-              fontSize: '0.85rem',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-              gap: '0.5rem',
-            }}
-          >
-            <Image
-              src="https://cdn.buymeacoffee.com/buttons/bmc-new-btn-logo.svg"
-              alt="Buy me a coffee"
-              width={18}
-              height={18}
-            />
-            Buy me a coffee
-          </a>
+      {/* ---------- FEATURES ---------- */}
+      <section className="features">
+        <h2 className="features-title">What Makes CalmPulse Different?</h2>
+        <div className="grid">
+          {cards.map(([t, d, icon]) => (
+            <article key={t} className="card">
+              <div className="thumb">{icon}</div>
+              <h3>{t}</h3>
+              <p>{d}</p>
+            </article>
+          ))}
         </div>
 
-        <footer style={{ fontSize: '0.9rem', color: '#666' }}>
-          CalmPulse © {new Date().getFullYear()}
-        </footer>
-      </main>
+        <a className="coffee" href="https://www.buymeacoffee.com/calmpulse" target="_blank" rel="noopener noreferrer">
+          <Image src="https://cdn.buymeacoffee.com/buttons/bmc-new-btn-logo.svg" alt="" width={18} height={18} />
+          Buy me a coffee
+        </a>
+
+        <footer>CalmPulse © {new Date().getFullYear()}</footer>
+      </section>
+
+      {/* ---------- STYLES ---------- */}
+      <style jsx>{`
+        .btn{background:#fff;color:#000;border:2px solid #000;border-radius:999px;padding:.55rem 1.4rem;font:500 1rem Poppins;cursor:pointer}
+        .btn.primary{background:#000;color:#fff}
+        .hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8rem 1rem 4rem;font-family:Poppins;background:#f9f9f9;text-align:center}
+        h1{font-size:2.4rem;margin:1rem 0 .45rem}
+        .tagline{font-size:1.12rem;margin-bottom:2rem}
+        .ring{margin-bottom:2.2rem}
+        .controls{display:flex;gap:1rem;margin-bottom:4.7rem}
+        .arrow-bounce{font-size:2rem;animation:bounce 2s infinite;margin-bottom:4rem}
+        @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
+        .features{font-family:Poppins;background:#f9f9f9;text-align:center;padding:0 1rem 5rem}
+        .features-title{font-size:1.8rem;font-weight:600;margin-bottom:4rem;}
+        .grid{max-width:1150px;margin:0 auto;display:grid;gap:2.4rem;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));position:relative}
+        .card{padding:0 1rem;position:relative;transition:all .3s ease}
+        .card:hover .thumb{transform:scale(1.05);box-shadow:0 8px 20px rgba(0,0,0,.1)}
+        .card:hover svg{stroke:#FFD700}
+        .thumb{width:100%;height:130px;background:#e9f0ff;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:3rem;margin-bottom:1.1rem;transition:all .3s ease}
+        h3{font-size:1.15rem;font-weight:600;margin:.7rem 0 .5rem}
+        p{font-size:.99rem;line-height:1.45;color:#555;margin:0}
+        .coffee{display:inline-flex;align-items:center;gap:.45rem;background:#FFDD00;color:#000;font:600 .95rem Poppins;padding:.6rem 1.55rem;border-radius:15px;box-shadow:0 4px 6px rgba(0,0,0,.1);text-decoration:none;margin-top:4rem}
+        footer{margin-top:3rem;font-size:.9rem;color:#666}
+      `}</style>
+
+      {/* audio */}
+      <audio ref={audioRef} src="/audio/Meditation_07_06.mp3" preload="auto" />
     </>
   );
-}
-
-function buttonStyle(primary: boolean): React.CSSProperties {
-  return {
-    backgroundColor: primary ? '#000' : '#fff',
-    color: primary ? '#fff' : '#000',
-    border: '2px solid #000',
-    padding: '0.5rem 1.25rem',
-    borderRadius: '999px',
-    fontSize: '1rem',
-    fontWeight: 500,
-    cursor: 'pointer',
-  };
 }
 

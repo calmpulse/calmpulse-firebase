@@ -7,14 +7,23 @@ export const metadata = {
   description: 'Breathe. Relax. Focus.',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <head />
+      <head>
+        {/* Pre-connect to Firebase CDNs for faster initial auth requests */}
+        <link rel="preconnect" href="https://www.gstatic.com" />
+        <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
+      </head>
+
       <body>
         {children}
 
-        {/* BMC script globally injected here */}
+        {/* Buy-Me-a-Coffee script */}
         <Script
           src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js"
           strategy="afterInteractive"
