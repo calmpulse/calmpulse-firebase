@@ -19,7 +19,7 @@ export default function Home() {
   const [elapsed, setElapsed] = useState(0);
 
   /* ---------- auth ---------- */
-  const [userId, setUserId] = useState(null);
+  const [userId, setUserId] = useState<string | null>(null);
   useEffect(() => onAuthStateChanged(auth, u => setUserId(u?.uid ?? null)), []);
 
   /* ---------- entry modal ---------- */
