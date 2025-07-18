@@ -13,21 +13,27 @@ const TOTAL_TIME = 15 * 60; // 15‑minute session
 
 export default function Home() {
   /* ---------- state & refs ---------- */
-  const audioRef = useRef(null);
-  const timerRef = useRef(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);  
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
   /* ---------- auth ---------- */
-  const [userId, setUserId] = useState<string | null>(null);
-  useEffect(() => onAuthStateChanged(auth, u => setUserId(u?.uid ?? null)), []);
+  const [userId, setUserId] = useState<string | null>(null);        // ⬅️ 3
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, u =>
+      setUserId(u?.uid ?? null)
+    );                                                              // ⬅️ 4  (explicit cleanup)
+    return unsubscribe;
+  }, []);
+
 
   /* ---------- entry modal ---------- */
   const [showModal, setShowModal] = useState(false);
-  const [modalMode, setModalMode] = useState('signup');
+  const [modalMode, setModalMode] = useState<'signup' | 'login'>('signup');  
 
   /* ---------- Firestore log ---------- */
-  const logDone = useCallback(async uid => {
+  const logDone = useCallback(async (uid: string | null) => {       // ⬅️ 6
     if (!uid) return;
     await addDoc(collection(db, 'sessions'), {
       userId: uid,
