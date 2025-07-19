@@ -1,7 +1,13 @@
 'use client';
 
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  type ReactElement,
+} from 'react';
 import Image from 'next/image';
-import { useRef, useState, useEffect, useCallback } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -15,7 +21,7 @@ const TOTAL_TIME = 15 * 60; // 15-minute session
 type Card = {
   title: string;
   desc: string;
-  icon: JSX.Element;
+  icon: ReactElement;
 };
 
 export default function Home() {
