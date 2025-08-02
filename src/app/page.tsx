@@ -10,96 +10,115 @@ import React, {
 import Image from 'next/image';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  doc,
+  setDoc,
+  addDoc,       
+  collection,
+  serverTimestamp,
+} from 'firebase/firestore';
 import AuthHeader from '@/components/AuthHeader';
 import EntryModal from '@/components/EntryModal';
 import { Database, Flame, ShieldCheck, TimerReset } from 'lucide-react';
+import { toLocalDay } from '@/lib/streak';
+import { findMeditationURL } from '@/lib/findMeditation';
 
-const TOTAL_TIME = 15 * 60; // 15-minute session
+const TOTAL_TIME = 60*15;
+
+/* ---------- helper : id unique jour+user ---------- */
+const dailyDocId = (uid: string, d = new Date()) =>
+  `${uid}_${toLocalDay(d)}`;
 
 /* ---------- types ---------- */
-type Card = {
-  title: string;
-  desc: string;
-  icon: ReactElement;
-};
+type Card = { title: string; desc: string; icon: ReactElement };
 
 export default function Home() {
-  /* ---------- state & refs ---------- */
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  // browser-safe timer type
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /* ---------- refs & state ---------- */
+  const audioRef  = useRef<HTMLAudioElement | null>(null);
+  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed,   setElapsed]   = useState(0);
 
-  /* ---------- auth ---------- */
+  /* --- audio dynamique --- */
+  const [audioURL, setAudioURL] = useState<string | null>(null);
+  const [loadErr,  setLoadErr]  = useState(false);
+
+  /** auth */
   const [userId, setUserId] = useState<string | null>(null);
-  useEffect(() => onAuthStateChanged(auth, u => setUserId(u?.uid ?? null)), []);
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, u => setUserId(u?.uid ?? null));
+    return unsub;                             // <- fixe TS (#1)
+  }, []);
+/* ---- charge la méditation du jour (avec fallback) ----*/
+  useEffect(() => {
+    (async () => {
+      const url = await findMeditationURL(14);      // 14 jours de repli
+      if (url) setAudioURL(url);
+      else     setLoadErr(true);
+    })();
+  }, []);
 
-  /* ---------- entry modal ---------- */
+  /** modal */
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'signup' | 'login'>('signup');
 
-  /* ---------- Firestore log ---------- */
+  /* ---------- Firestore log (fin de session) ---------- */
   const logDone = useCallback(
-    async (uid: string | null) => {
-      if (!uid) return;
-      await addDoc(collection(db, 'sessions'), {
-        userId: uid,
-        endedAt: serverTimestamp(),
-        status: 'completed',
-        duration: elapsed,
-      });
-    },
-    [elapsed],
-  );
+  async (uid: string | null, duration: number) => {
+    if (!uid) return;
+    await setDoc(
+      doc(db, 'sessions', dailyDocId(uid)),
+      { userId: uid, endedAt: serverTimestamp(), status: 'completed', duration },
+      { merge: true },
+    );
+  },
+  [],                       //  ← plus de dépendance à `elapsed`
+);
 
-  /* ---------- timer loop ---------- */
-  useEffect(() => {
+
+/* ---------- timer loop ---------- */
+useEffect(() => {
     if (!isPlaying) return;
 
     timerRef.current = setInterval(() => {
       setElapsed(p => {
         if (p >= TOTAL_TIME) {
-          if (timerRef.current !== null) clearInterval(timerRef.current);
+          if (timerRef.current) clearInterval(timerRef.current);
+          timerRef.current = null;
           audioRef.current?.pause();
-          logDone(userId);
+          logDone(userId, TOTAL_TIME);          // ✅  pass duration
           return TOTAL_TIME;
         }
         return p + 1;
       });
     }, 1000);
 
-    return () => {
-      if (timerRef.current !== null) clearInterval(timerRef.current);
+    return () => {                              // cleanup
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
     };
   }, [isPlaying, userId, logDone]);
 
-  /* ---------- controls ---------- */
-  const play = async () => {
-    if (!audioRef.current) return;
 
+
+ /* ---------- controls ---------- */
+const play = async () => {
+    if (!audioURL) return;
+    if (!audioRef.current) return;
     if (elapsed === TOTAL_TIME || elapsed === 0) {
       audioRef.current.currentTime = 0;
       setElapsed(0);
     }
+    await audioRef.current.play();
+    setIsPlaying(true);
 
-    try {
-      await audioRef.current.play();
-      setIsPlaying(true);
-
-      userId &&
-        addDoc(collection(db, 'sessions'), {
-          userId,
-          startedAt: serverTimestamp(),
-          status: 'started',
-        });
-    } catch (e) {
-      // autoplay blocked etc.
-      console.error(e);
-      setIsPlaying(false);
+    if (userId) {
+      addDoc(collection(db, 'sessions'), {
+        userId,
+        startedAt: serverTimestamp(),
+        status: 'started',
+      });
     }
   };
 
@@ -108,7 +127,7 @@ export default function Home() {
     setIsPlaying(false);
   };
 
-  const dash = 314 - (314 * elapsed) / TOTAL_TIME; // circle progress
+  const dash = 314 - (314 * elapsed) / TOTAL_TIME;
 
   /* ---------- feature cards ---------- */
   const cards: Card[] = [
@@ -148,7 +167,7 @@ export default function Home() {
 
         <div className="ring">
           <svg width="120" height="120">
-            <circle r="50" cx="60" cy="60" stroke="#eee" strokeWidth="10" fill="none" />
+            <circle r="50" cx="60" cy="60" stroke="#eee"   strokeWidth="10" fill="none" />
             <circle
               r="50"
               cx="60"
@@ -165,7 +184,7 @@ export default function Home() {
         </div>
 
         <div className="controls">
-          <button className="btn primary" onClick={play} disabled={isPlaying}>
+          <button className="btn primary" onClick={play} disabled={isPlaying || !audioURL}>
             Start
           </button>
           <button className="btn" onClick={pause} disabled={!isPlaying}>
@@ -178,7 +197,7 @@ export default function Home() {
 
       {/* ---------- FEATURES ---------- */}
       <section className="features">
-        <h2 className="features-title">What Makes CalmPulse Different?</h2>
+        <h2 className="features-title">What Makes CalmPulseDaily Different?</h2>
         <div className="grid">
           {cards.map(({ title, desc, icon }) => (
             <article key={title} className="card">
@@ -204,143 +223,165 @@ export default function Home() {
           Buy me a coffee
         </a>
 
-        <footer>CalmPulse © {new Date().getFullYear()}</footer>
+        <footer>CalmPulseDaily © {new Date().getFullYear()}</footer>
       </section>
 
       {/* ---------- STYLES ---------- */}
       <style jsx>{`
-        .btn {
-          background: #fff;
-          color: #000;
-          border: 2px solid #000;
-          border-radius: 999px;
-          padding: 0.55rem 1.4rem;
-          font: 500 1rem Poppins;
-          cursor: pointer;
+        
+        .btn,
+        .btn.primary{
+          background:#fff;
+          color:#000;
+          border:2px solid #000;
+          border-radius:999px;
+          padding:.55rem 1.4rem;
+          font:500 1rem Poppins;
+          cursor:pointer;
+
+          min-width:110px;            
+          text-align:center;
+          transition:transform .3s ease, box-shadow .3s ease;
+          will-change:transform;
         }
-        .btn.primary {
-          background: #000;
-          color: #fff;
+        .btn.primary{
+          background:#000;
+          color:#fff;
         }
-        .hero {
-          min-height: 100vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 8rem 1rem 4rem;
-          font-family: Poppins;
-          background: #f9f9f9;
-          text-align: center;
+        .btn:hover,
+        .btn.primary:hover{
+          transform:scale(1.05);
+          box-shadow:0 8px 20px rgba(0,0,0,.15);
         }
-        h1 {
-          font-size: 2.4rem;
-          margin: 1rem 0 0.45rem;
+
+        .hero{
+          min-height:100vh;
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          padding:8rem 1rem 4rem;
+          font-family:Poppins;
+          background:#f9f9f9;
+          text-align:center;
         }
-        .tagline {
-          font-size: 1.12rem;
-          margin-bottom: 2rem;
+        h1{
+          font-size:2.4rem;
+          margin:1rem 0 .45rem;
         }
-        .ring {
-          margin-bottom: 2.2rem;
+        .tagline{
+          font-size:1.12rem;
+          margin-bottom:2rem;
         }
-        .controls {
-          display: flex;
-          gap: 1rem;
-          margin-bottom: 4.7rem;
+        .ring{
+          margin:0 auto 2.2rem;                
         }
-        .arrow-bounce {
-          font-size: 2rem;
-          animation: bounce 2s infinite;
-          margin-bottom: 4rem;
+        .controls{
+          display:flex;
+          gap:1rem;
+          margin:0 auto 4.7rem;                
         }
-        @keyframes bounce {
-          0%,
-          100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(8px);
-          }
+        .arrow-bounce{
+          font-size:2rem;
+          animation:bounce 2s infinite;
+          margin-bottom:4rem;
         }
-        .features {
-          font-family: Poppins;
-          background: #f9f9f9;
-          text-align: center;
-          padding: 0 1rem 5rem;
+        @keyframes bounce{
+          0%,100%{transform:translateY(0);}
+          50%   {transform:translateY(8px);}
         }
-        .features-title {
-          font-size: 1.8rem;
-          font-weight: 600;
-          margin-bottom: 4rem;
+
+        /* -------- FEATURES -------- */
+        .features{
+          font-family:Poppins;
+          background:#f9f9f9;
+          text-align:center;
+          padding:0 1rem 5rem;
         }
-        .grid {
-          max-width: 1150px;
-          margin: 0 auto;
-          display: grid;
-          gap: 2.4rem;
-          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-          position: relative;
+        .features-title{
+          font-size:1.8rem;
+          font-weight:600;
+          margin-bottom:4rem;
         }
-        .card {
-          padding: 0 1rem;
-          position: relative;
-          transition: all 0.3s ease;
+        .grid{
+          max-width:1150px;
+          margin:0 auto;
+          display:grid;
+          gap:2.4rem;
+          grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+          position:relative;
         }
-        .card:hover .thumb {
-          transform: scale(1.05);
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        .card{
+          padding:0 1rem;
+          position:relative;
+          transition:all .3s ease;
         }
-        .card:hover svg {
-          stroke: #ffd700;
+        .card:hover .thumb{
+          transform:scale(1.05);
+          box-shadow:0 8px 20px rgba(0,0,0,.1);
         }
-        .thumb {
-          width: 100%;
-          height: 130px;
-          background: #e9f0ff;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 3rem;
-          margin-bottom: 1.1rem;
-          transition: all 0.3s ease;
+        .card:hover svg{
+          stroke:#ffd700;
         }
-        h3 {
-          font-size: 1.15rem;
-          font-weight: 600;
-          margin: 0.7rem 0 0.5rem;
+        .thumb{
+          width:100%;
+          height:130px;
+          background:#e9f0ff;
+          border-radius:12px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:3rem;
+          margin-bottom:1.1rem;
+          transition:all .3s ease;
         }
-        p {
-          font-size: 0.99rem;
-          line-height: 1.45;
-          color: #555;
-          margin: 0;
+        h3{
+          font-size:1.15rem;
+          font-weight:600;
+          margin:.7rem 0 .5rem;
         }
-        .coffee {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.45rem;
-          background: #ffdd00;
-          color: #000;
-          font: 600 0.95rem Poppins;
-          padding: 0.6rem 1.55rem;
-          border-radius: 15px;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          text-decoration: none;
-          margin-top: 4rem;
+        p{
+          font-size:.99rem;
+          line-height:1.45;
+          color:#555;
+          margin:0;
         }
-        footer {
-          margin-top: 3rem;
-          font-size: 0.9rem;
-          color: #666;
+        .coffee{
+          display:inline-flex;
+          align-items:center;
+          gap:.45rem;
+          background:#ffdd00;
+          color:#000;
+          font:600 .95rem Poppins;
+          padding:.6rem 1.55rem;
+          border-radius:15px;
+          box-shadow:0 4px 6px rgba(0,0,0,.1);
+          text-decoration:none;
+          margin-top:4rem;
+        }
+        footer{
+          margin-top:3rem;
+          font-size:.9rem;
+          color:#666;
         }
       `}</style>
 
+
       {/* audio */}
       <audio ref={audioRef} src="/audio/Meditation_07_06.mp3" preload="auto" />
-    </>
-  );
-}
+      {/* message si aucune piste trouvée */}
+      {loadErr && (
+        <p style={{ color: '#e11d48', textAlign: 'center', marginTop: '2rem' }}>
+          Désolé, aucune méditation n’est disponible pour le moment.
+        </p>
+      )}
+
+      {/* lecteur audio dynamique */}
+      {audioURL && (
+        <audio ref={audioRef} src={audioURL} preload="metadata" />
+      )}
+          </>
+        );
+      }
 
 

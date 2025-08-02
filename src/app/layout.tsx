@@ -2,6 +2,7 @@ import './globals.css';
 import React from 'react';
 import Script from 'next/script';
 
+
 export const metadata = {
   title: 'CalmPulse',
   description: 'Breathe. Relax. Focus.',
