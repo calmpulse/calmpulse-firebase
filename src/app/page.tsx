@@ -13,7 +13,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import {
   doc,
   setDoc,
-  addDoc,       
+  addDoc,
   collection,
   serverTimestamp,
 } from 'firebase/firestore';
@@ -23,41 +23,80 @@ import { Database, Flame, ShieldCheck, TimerReset } from 'lucide-react';
 import { toLocalDay } from '@/lib/streak';
 import { findMeditationURL } from '@/lib/findMeditation';
 
-const TOTAL_TIME = 60*15;
+const TOTAL_TIME = 60 * 15;
 
 /* ---------- helper : id unique jour+user ---------- */
-const dailyDocId = (uid: string, d = new Date()) =>
-  `${uid}_${toLocalDay(d)}`;
+const dailyDocId = (uid: string, d = new Date()) => `${uid}_${toLocalDay(d)}`;
 
 /* ---------- types ---------- */
 type Card = { title: string; desc: string; icon: ReactElement };
 
 export default function Home() {
   /* ---------- refs & state ---------- */
-  const audioRef  = useRef<HTMLAudioElement | null>(null);
-  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [elapsed,   setElapsed]   = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
   /* --- audio dynamique --- */
   const [audioURL, setAudioURL] = useState<string | null>(null);
-  const [loadErr,  setLoadErr]  = useState(false);
+  const [loadErr, setLoadErr] = useState(false);
 
   /** auth */
   const [userId, setUserId] = useState<string | null>(null);
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, u => setUserId(u?.uid ?? null));
-    return unsub;                             // <- fixe TS (#1)
+    const unsub = onAuthStateChanged(auth, (u) => setUserId(u?.uid ?? null));
+    return unsub;
   }, []);
-/* ---- charge la méditation du jour (avec fallback) ----*/
+
+  /* ---- charge la méditation du jour (avec fallback) ----*/
   useEffect(() => {
     (async () => {
-      const url = await findMeditationURL(14);      // 14 jours de repli
-      if (url) setAudioURL(url);
-      else     setLoadErr(true);
+      try {
+        const url = await findMeditationURL(); // calendrier global (Lun=001..Dim=007)
+        if (url) setAudioURL(url);
+        else setLoadErr(true);
+      } catch {
+        setLoadErr(true);
+      }
     })();
   }, []);
+
+  /* ---- injecte l'URL dans l'élément audio ---- */
+  useEffect(() => {
+    if (!audioRef.current || !audioURL) return;
+    audioRef.current.src = audioURL;
+    audioRef.current.load();
+    // console.log('[Audio] src set:', audioURL);
+  }, [audioURL]);
+
+  /* ---- écouter les erreurs UNIQUEMENT après que l'URL existe ---- */
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !audioURL) return;
+
+    const onErr = () => {
+      // console.error('[Audio] element error after URL set:', el.error);
+      setLoadErr(true);
+    };
+    const onLoaded = () => {
+      // console.log('[Audio] loadedmetadata:', el.duration);
+    };
+    const onCanPlay = () => {
+      // console.log('[Audio] canplay');
+    };
+
+    el.addEventListener('error', onErr);
+    el.addEventListener('loadedmetadata', onLoaded);
+    el.addEventListener('canplay', onCanPlay);
+
+    return () => {
+      el.removeEventListener('error', onErr);
+      el.removeEventListener('loadedmetadata', onLoaded);
+      el.removeEventListener('canplay', onCanPlay);
+    };
+  }, [audioURL]);
 
   /** modal */
   const [showModal, setShowModal] = useState(false);
@@ -65,53 +104,52 @@ export default function Home() {
 
   /* ---------- Firestore log (fin de session) ---------- */
   const logDone = useCallback(
-  async (uid: string | null, duration: number) => {
-    if (!uid) return;
-    await setDoc(
-      doc(db, 'sessions', dailyDocId(uid)),
-      { userId: uid, endedAt: serverTimestamp(), status: 'completed', duration },
-      { merge: true },
-    );
-  },
-  [],                       //  ← plus de dépendance à `elapsed`
-);
+    async (uid: string | null, duration: number) => {
+      if (!uid) return;
+      await setDoc(
+        doc(db, 'sessions', dailyDocId(uid)),
+        { userId: uid, endedAt: serverTimestamp(), status: 'completed', duration },
+        { merge: true },
+      );
+    },
+    [],
+  );
 
-
-/* ---------- timer loop ---------- */
-useEffect(() => {
+  /* ---------- timer loop ---------- */
+  useEffect(() => {
     if (!isPlaying) return;
 
     timerRef.current = setInterval(() => {
-      setElapsed(p => {
+      setElapsed((p) => {
         if (p >= TOTAL_TIME) {
           if (timerRef.current) clearInterval(timerRef.current);
           timerRef.current = null;
           audioRef.current?.pause();
-          logDone(userId, TOTAL_TIME);          // ✅  pass duration
+          logDone(userId, TOTAL_TIME);
           return TOTAL_TIME;
         }
         return p + 1;
       });
     }, 1000);
 
-    return () => {                              // cleanup
+    return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
     };
   }, [isPlaying, userId, logDone]);
 
-
-
- /* ---------- controls ---------- */
-const play = async () => {
-    if (!audioURL) return;
-    if (!audioRef.current) return;
+  /* ---------- controls ---------- */
+  const play = async () => {
+    if (!audioURL || !audioRef.current) return;
     if (elapsed === TOTAL_TIME || elapsed === 0) {
       audioRef.current.currentTime = 0;
       setElapsed(0);
     }
-    await audioRef.current.play();
     setIsPlaying(true);
+    audioRef.current.play().catch(() => {
+      // play() peut être rejeté si interaction manquante ; l'utilisateur peut recliquer
+      setIsPlaying(false);
+    });
 
     if (userId) {
       addDoc(collection(db, 'sessions'), {
@@ -156,7 +194,7 @@ const play = async () => {
   /* ---------- UI ---------- */
   return (
     <>
-      <AuthHeader onShowModal={m => { setModalMode(m); setShowModal(true); }} />
+      <AuthHeader onShowModal={(m) => { setModalMode(m); setShowModal(true); }} />
       {showModal && <EntryModal mode={modalMode} onClose={() => setShowModal(false)} />}
 
       {/* ---------- HERO ---------- */}
@@ -167,7 +205,7 @@ const play = async () => {
 
         <div className="ring">
           <svg width="120" height="120">
-            <circle r="50" cx="60" cy="60" stroke="#eee"   strokeWidth="10" fill="none" />
+            <circle r="50" cx="60" cy="60" stroke="#eee" strokeWidth="10" fill="none" />
             <circle
               r="50"
               cx="60"
@@ -228,7 +266,6 @@ const play = async () => {
 
       {/* ---------- STYLES ---------- */}
       <style jsx>{`
-        
         .btn,
         .btn.primary{
           background:#fff;
@@ -238,8 +275,7 @@ const play = async () => {
           padding:.55rem 1.4rem;
           font:500 1rem Poppins;
           cursor:pointer;
-
-          min-width:110px;            
+          min-width:110px;
           text-align:center;
           transition:transform .3s ease, box-shadow .3s ease;
           will-change:transform;
@@ -274,12 +310,12 @@ const play = async () => {
           margin-bottom:2rem;
         }
         .ring{
-          margin:0 auto 2.2rem;                
+          margin:0 auto 2.2rem;
         }
         .controls{
           display:flex;
           gap:1rem;
-          margin:0 auto 4.7rem;                
+          margin:0 auto 4.7rem;
         }
         .arrow-bounce{
           font-size:2rem;
@@ -366,9 +402,6 @@ const play = async () => {
         }
       `}</style>
 
-
-      {/* audio */}
-      <audio ref={audioRef} src="/audio/Meditation_07_06.mp3" preload="auto" />
       {/* message si aucune piste trouvée */}
       {loadErr && (
         <p style={{ color: '#e11d48', textAlign: 'center', marginTop: '2rem' }}>
@@ -376,12 +409,11 @@ const play = async () => {
         </p>
       )}
 
-      {/* lecteur audio dynamique */}
-      {audioURL && (
-        <audio ref={audioRef} src={audioURL} preload="metadata" />
-      )}
-          </>
-        );
-      }
+      {/* lecteur audio unique (src injecté via useEffect) */}
+      <audio ref={audioRef} preload="auto" />
+    </>
+  );
+}
+
 
 
