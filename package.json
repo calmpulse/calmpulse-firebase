@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "next build",
     "postbuild": "next-sitemap",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "emulators": "firebase emulators:start",
+    "seed:emulators": "firebase emulators:exec \"node scripts/seed-emulators.mjs\""
   },
   "dependencies": {
     "date-fns": "^2.30.0",

@@ -13,5 +13,36 @@ service cloud.firestore {
       allow write: if request.auth != null
                    && request.auth.uid == request.resource.data.userId;
     }
+
+    match /mantras/{mantraId} {
+      allow read:  if request.auth != null
+                   && request.auth.uid == resource.data.userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Public community feed of full 15-minute completions
+    match /communityCompletions/{completionId} {
+      // Everyone can view the feed
+      allow read: if true;
+
+      // Only the authenticated user can write their own completion entry.
+      // Enforce canonical doc id and basic data shape (prevents spoofing / inconsistent totals).
+      allow create, update: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.duration == 900
+        && request.resource.data.day is string
+        && request.resource.data.month is string
+        && request.resource.data.name is string
+        && request.resource.data.day.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && request.resource.data.month.matches('^\\d{4}-\\d{2}$')
+        // Ensure `day` starts with `month` without using unsupported substring()
+        && request.resource.data.day.matches('^' + request.resource.data.month + '-\\d{2}$')
+        && request.resource.data.name.size() <= 60
+        && completionId == request.auth.uid + '_' + request.resource.data.day;
+
+      // No deletes from clients (keeps all-time totals stable)
+      allow delete: if false;
+    }
   }
 }

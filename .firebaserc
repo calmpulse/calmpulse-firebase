@@ -1,7 +1,5 @@
 {
   "projects": {
-    "FB calmpulse": "calmpulse-f97cf"
-  },
-  "targets": {},
-  "etags": {}
+    "default": "calmpulse-firebase"
+  }
 }

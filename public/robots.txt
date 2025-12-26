@@ -1,0 +1,11 @@
+# *
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+
+# Host
+Host: https://www.calmpulsedaily.com
+
+# Sitemaps
+Sitemap: https://www.calmpulsedaily.com/sitemap.xml

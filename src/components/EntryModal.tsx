@@ -20,6 +20,7 @@ export default function EntryModal({
   const [currentMode, setCurrentMode] = useState<'signup' | 'login'>(mode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [nickname, setNickname] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +58,9 @@ export default function EntryModal({
         void updateProfile(cred.user, {
           displayName: `${firstName} ${lastName}`,
         });
+        const safeNickname = nickname.trim().slice(0, 60);
         void setDoc(doc(db, 'users', cred.user.uid), {
+          nickname: safeNickname || null,
           firstName,
           lastName,
           email,
@@ -87,6 +90,13 @@ export default function EntryModal({
   };
 
   /* ────────────────────────── JSX ────────────────────────── */
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    // Trigger animation after mount
+    setTimeout(() => setIsVisible(true), 10);
+  }, []);
+
   return (
     <div
       onClick={closeOnBackdrop}
@@ -94,11 +104,13 @@ export default function EntryModal({
         position: 'fixed',
         inset: 0,
         zIndex: 1000,
-        background: 'rgba(0,0,0,.17)',
+        background: isVisible ? 'rgba(0,0,0,.4)' : 'rgba(0,0,0,0)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontFamily: 'Poppins, sans-serif',
+        transition: 'background .4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+        backdropFilter: isVisible ? 'blur(4px)' : 'blur(0px)',
       }}
     >
       <div
@@ -110,9 +122,11 @@ export default function EntryModal({
           width: '94%',
           maxWidth: 380,
           padding: '2rem 1.7rem 1.3rem',
-          boxShadow: '0 10px 34px rgba(0,0,0,.17)',
+          boxShadow: isVisible ? '0 20px 60px rgba(0,0,0,.15)' : '0 10px 34px rgba(0,0,0,.1)',
           position: 'relative',
-          animation: 'modalIn .18s cubic-bezier(.2,1.6,.55,1)',
+          transform: isVisible ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.95)',
+          opacity: isVisible ? 1 : 0,
+          transition: 'all .5s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         }}
       >
         {/* × close */}
@@ -125,37 +139,60 @@ export default function EntryModal({
             right: 16,
             background: 'none',
             border: 0,
-            fontSize: 22,
+            fontSize: 24,
             color: '#888',
             cursor: 'pointer',
+            width: 32,
+            height: 32,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '50%',
+            transition: 'all .3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#f5f5f5';
+            e.currentTarget.style.color = '#111';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'none';
+            e.currentTarget.style.color = '#888';
           }}
         >
           ×
         </button>
 
-        <h2 style={{ fontWeight: 700, fontSize: '1.45rem', textAlign: 'center', marginBottom: 22 }}>
+        <h2 style={{ fontWeight: 700, fontSize: '1.45rem', textAlign: 'center', marginBottom: 22, color: '#111' }}>
           {currentMode === 'signup' ? 'Create your account' : 'Login to CalmPulse'}
         </h2>
 
         {/* ─── form ─── */}
         <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
           {currentMode === 'signup' && (
-            <div style={{ display: 'flex', gap: 9, minWidth: 0 }}>
+            <>
               <input
-                required
-                placeholder="First name"
-                value={firstName}
-                onChange={e => setFirstName(e.target.value)}
+                placeholder="Nickname (public in Community Hub)"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
                 style={inputStyle}
               />
-              <input
-                required
-                placeholder="Last name"
-                value={lastName}
-                onChange={e => setLastName(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
+              <div style={{ display: 'flex', gap: 9, minWidth: 0 }}>
+                <input
+                  required
+                  placeholder="First name"
+                  value={firstName}
+                  onChange={e => setFirstName(e.target.value)}
+                  style={inputStyle}
+                />
+                <input
+                  required
+                  placeholder="Last name"
+                  value={lastName}
+                  onChange={e => setLastName(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+            </>
           )}
 
           <input
@@ -188,14 +225,37 @@ export default function EntryModal({
             style={{
               marginTop: 2,
               width: '100%',
-              border: 0,
-              borderRadius: 9999,
-              padding: '.68rem 0',
-              fontWeight: 600,
-              fontSize: '1.06rem',
-              background: loading ? '#555' : '#111',
+              border: 'none',
+              borderRadius: 8,
+              padding: '.7rem 0',
+              fontWeight: 500,
+              fontSize: '1rem',
+              background: loading ? '#d1d5db' : '#111',
               color: '#fff',
               cursor: loading ? 'default' : 'pointer',
+              transition: 'all .3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#333';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#111';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }
+            }}
+            onMouseDown={(e) => {
+              if (!loading) {
+                e.currentTarget.style.transform = 'scale(0.98)';
+              }
+            }}
+            onMouseUp={(e) => {
+              if (!loading) {
+                e.currentTarget.style.transform = 'scale(1)';
+              }
             }}
           >
             {loading
@@ -214,9 +274,17 @@ export default function EntryModal({
             margin: '.85rem auto 0',
             background: 'none',
             border: 0,
-            color: '#1e60d4',
-            textDecoration: 'underline',
+            color: '#667eea',
+            textDecoration: 'none',
             cursor: 'pointer',
+            fontSize: '0.95rem',
+            transition: 'color .3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#764ba2';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = '#667eea';
           }}
         >
           {currentMode === 'signup'
@@ -225,13 +293,6 @@ export default function EntryModal({
         </button>
       </div>
 
-      {/* pop-in animation */}
-      <style>{`
-        @keyframes modalIn {
-          0% { transform: translateY(28px) scale(.97); opacity: .58 }
-          100% { transform: none; opacity: 1 }
-        }
-      `}</style>
     </div>
   );
 }
@@ -246,4 +307,15 @@ const inputStyle: React.CSSProperties = {
   fontSize: '1rem',
   fontFamily: 'inherit',
   background: '#fcfcfc',
+  transition: 'all .3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
 };
+
+      {/* Input focus styles */}
+      <style>{`
+        input:focus {
+          outline: none;
+          border-color: #111 !important;
+          background: #fff !important;
+          box-shadow: 0 0 0 3px rgba(0,0,0,.05) !important;
+        }
+      `}</style>

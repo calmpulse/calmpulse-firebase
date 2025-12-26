@@ -16,6 +16,39 @@
         { "fieldPath": "userId",  "order": "ASCENDING" },
         { "fieldPath": "endedAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "mantras",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId",  "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "communityCompletions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "day", "order": "ASCENDING" },
+        { "fieldPath": "duration", "order": "ASCENDING" },
+        { "fieldPath": "endedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "communityCompletions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "day", "order": "ASCENDING" },
+        { "fieldPath": "duration", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "communityCompletions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "month", "order": "ASCENDING" },
+        { "fieldPath": "duration", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
